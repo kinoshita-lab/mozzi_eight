@@ -7,26 +7,18 @@
 
 #include "pitches.h"
 
-
-
 #include <tables/square_no_alias_2048_int8.h> // table for Oscils to play
 #define CONTROL_RATE 64
 
-
-void msTimer2Callback();
 
 Oscil< SQUARE_NO_ALIAS_2048_NUM_CELLS, AUDIO_RATE > osc(SQUARE_NO_ALIAS_2048_DATA);
 LowPassFilter lpf;
 LowPassFilter lpf2;
 
-ADSR <CONTROL_RATE, AUDIO_RATE> envelope;
+
 
 #if 0
-enum {
-	NumberOfNotes = 36
-};
-
-
+static const int NumberOfNotes = 36
 static const uint16_t NoteNumbers[NumberOfNotes] =
 { 0, 
   NOTE_C1, NOTE_D1,  NOTE_E1, NOTE_G1, NOTE_A1, 
@@ -38,6 +30,7 @@ static const uint16_t NoteNumbers[NumberOfNotes] =
   NOTE_C7, NOTE_D7,  NOTE_E7, NOTE_G7, NOTE_A7,
 };
 #endif
+
 // dorian
 #if 1
 static const uint8_t NumberOfNotes = 43;
@@ -52,7 +45,7 @@ static const uint16_t NoteNumbers[NumberOfNotes] =
 };
 #endif
 
-class StepPitchSelector
+class MozziEight
 {
 public:
 	enum {
@@ -63,14 +56,14 @@ public:
 		DECAY_AD_INPUT_PIN = 4,
 
     
-		SEL_0 = 2,
-		SEL_1 = 3,
-		SEL_2 = 4,
+		SEL_0 = 4,
+		SEL_1 = 5,
+		SEL_2 = 6,
     
 		STEP_MAX = 8,
 	};
   
-StepPitchSelector() 
+MozziEight() 
     : counter(0),
 		maxStep(STEP_MAX),
 		durationCounter(0),
@@ -81,7 +74,7 @@ StepPitchSelector()
         pinMode(SEL_2, OUTPUT);
 	}
   
-	~StepPitchSelector() {}
+	~MozziEight() {}
   
 	uint8_t getCount() const {
 		return counter;
@@ -156,33 +149,31 @@ protected:
 };
 
 
-StepPitchSelector pitchSelector;
+MozziEight mozziEight;
+bool tick = false;
 
-void msTimer2Callback()
+void tickInterrupt()
 {
-	pitchSelector.tick();
-	pitchSelector.readAdValue();
-	osc.setFreq(static_cast< int > (pitchSelector.getLastRead()));
-	const int decayTime = mozziAnalogRead(StepPitchSelector::DECAY_AD_INPUT_PIN) << 1;
-	pitchSelector.setDurationMax(decayTime);
-	pitchSelector.resetDuration();
+	mozziEight.tick();
+	mozziEight.readAdValue();
+	osc.setFreq(static_cast< int > (mozziEight.getLastRead()));
+	const int decayTime = mozziAnalogRead(MozziEight::DECAY_AD_INPUT_PIN) << 1;
+	mozziEight.setDurationMax(decayTime);
+	mozziEight.resetDuration();
 }
 
 void setup()
 {
 	startMozzi(CONTROL_RATE);
-	envelope.setADLevels(255, 0);
+	attachInterrupt(0, tickInterrupt, RISING);
+
 	lpf.setResonance(200);
 	lpf2.setResonance(200);
   
   
 	osc.setFreq(440);
 	Serial.begin(115200);
-	MsTimer2::set(120, msTimer2Callback);
-	MsTimer2::start();
 }
-
-byte gain;
 
 void loop()
 {
@@ -191,17 +182,13 @@ void loop()
 
 void updateControl() 
 {
-
-	const int cutoff = mozziAnalogRead(StepPitchSelector::FILTER_CUTOFF_AD_INPUT_PIN) >> 2;
-	const int resonance = mozziAnalogRead(StepPitchSelector::FILTER_RESONANCE_AD_INPUT_PIN) >> 2;
+	const int cutoff = mozziAnalogRead(MozziEight::FILTER_CUTOFF_AD_INPUT_PIN) >> 2;
+	const int resonance = mozziAnalogRead(MozziEight::FILTER_RESONANCE_AD_INPUT_PIN) >> 2;
 
 	lpf.setResonance(resonance);
 	lpf.setCutoffFreq(cutoff);
 	lpf2.setResonance(resonance);
 	lpf2.setCutoffFreq(cutoff);
-	
-	envelope.update();
-	Serial.println(gain);
 }
 
 int updateAudio()
@@ -211,8 +198,8 @@ int updateAudio()
 
 	int8_t gain = 1;
 	
-	pitchSelector.incrementDurationCounter();
-	if (pitchSelector.getDurationCounter() >= pitchSelector.getMaxDuration()) {
+	mozziEight.incrementDurationCounter();
+	if (mozziEight.getDurationCounter() >= mozziEight.getMaxDuration()) {
 		gain = 0;
 	}
 	
